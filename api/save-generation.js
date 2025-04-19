@@ -15,7 +15,6 @@ export default async function handler(req, res) {
   }
 
   try {
-    // Получаем текущий файл
     const response = await fetch(apiUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
@@ -27,10 +26,8 @@ export default async function handler(req, res) {
     let sha;
 
     if (response.status === 404) {
-      // Если файл не существует, создаём новый
       content = [newGeneration];
     } else if (response.ok) {
-      // Если файл существует, получаем его содержимое
       const data = await response.json();
       sha = data.sha;
       content = JSON.parse(Buffer.from(data.content, "base64").toString());
@@ -43,7 +40,6 @@ export default async function handler(req, res) {
       JSON.stringify(content, null, 2)
     ).toString("base64");
 
-    // Создаём или обновляем файл
     const updateResponse = await fetch(apiUrl, {
       method: "PUT",
       headers: {
@@ -56,7 +52,7 @@ export default async function handler(req, res) {
             ? "Created history.json with first generation"
             : "Added new generation",
         content: encodedContent,
-        sha, // sha будет undefined для нового файла
+        sha,
       }),
     });
 
