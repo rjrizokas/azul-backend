@@ -1,5 +1,3 @@
-// api/save-generation.js
-
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Only POST allowed' });
@@ -20,6 +18,27 @@ export default async function handler(req, res) {
         Accept: 'application/vnd.github+json',
       },
     });
+
+    if (response.status === 404) {
+      // Если файл не существует, создаём его
+      const newContent = [newGeneration];
+      const encodedContent = Buffer.from(JSON.stringify(newContent, null, 2)).toString('base64');
+
+      const createResponse = await fetch(apiUrl, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/vnd.github+json',
+        },
+        body: JSON.stringify({
+          message: 'Создан новый файл history.json с первой генерацией',
+          content: encodedContent,
+        }),
+      });
+
+      const createResult = await createResponse.json();
+      return res.status(200).json({ success: true, result: createResult });
+    }
 
     const data = await response.json();
     const sha = data.sha;
