@@ -1,70 +1,73 @@
 export default async function handler(req, res) {
-  if (req.method !== 'POST') {
-    return res.status(405).json({ error: 'Only POST allowed' });
+  if (req.method !== "POST") {
+    return res.status(405).json({ error: "Only POST allowed" });
   }
 
   const token = process.env.GITHUB_TOKEN;
-  const repo = 'rjrizokas/azul-rounds';
-  const path = 'history.json';
+  const repo = "rjrizokas/azul-rounds";
+  const path = "history.json";
   const apiUrl = `https://api.github.com/repos/${repo}/contents/${path}`;
 
   const { newGeneration } = req.body;
+
+  if (!token) {
+    return res.status(500).json({ error: "GitHub token is not configured" });
+  }
 
   try {
     // Получаем текущий файл
     const response = await fetch(apiUrl, {
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
+        Accept: "application/vnd.github+json",
       },
     });
 
+    let content = [];
+    let sha;
+
     if (response.status === 404) {
-      // Если файл не существует, создаём его
-      const newContent = [newGeneration];
-      const encodedContent = Buffer.from(JSON.stringify(newContent, null, 2)).toString('base64');
-
-      const createResponse = await fetch(apiUrl, {
-        method: 'PUT',
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: 'application/vnd.github+json',
-        },
-        body: JSON.stringify({
-          message: 'Создан новый файл history.json с первой генерацией',
-          content: encodedContent,
-        }),
-      });
-
-      const createResult = await createResponse.json();
-      return res.status(200).json({ success: true, result: createResult });
+      // Если файл не существует, создаём новый
+      content = [newGeneration];
+    } else if (response.ok) {
+      // Если файл существует, получаем его содержимое
+      const data = await response.json();
+      sha = data.sha;
+      content = JSON.parse(Buffer.from(data.content, "base64").toString());
+      content.push(newGeneration);
+    } else {
+      throw new Error(`GitHub API error: ${response.status}`);
     }
 
-    const data = await response.json();
-    const sha = data.sha;
-    const content = JSON.parse(Buffer.from(data.content, 'base64').toString());
-    const updatedContent = [...content, newGeneration];
-    const encodedContent = Buffer.from(JSON.stringify(updatedContent, null, 2)).toString('base64');
+    const encodedContent = Buffer.from(
+      JSON.stringify(content, null, 2)
+    ).toString("base64");
 
-    // Обновляем файл
+    // Создаём или обновляем файл
     const updateResponse = await fetch(apiUrl, {
-      method: 'PUT',
+      method: "PUT",
       headers: {
         Authorization: `Bearer ${token}`,
-        Accept: 'application/vnd.github+json',
+        Accept: "application/vnd.github+json",
       },
       body: JSON.stringify({
-        message: 'Добавлена новая генерация',
+        message:
+          response.status === 404
+            ? "Created history.json with first generation"
+            : "Added new generation",
         content: encodedContent,
-        sha,
+        sha, // sha будет undefined для нового файла
       }),
     });
 
-    const result = await updateResponse.json();
-    res.status(200).json({ success: true, result });
+    if (!updateResponse.ok) {
+      throw new Error(`Failed to update file: ${updateResponse.status}`);
+    }
 
+    const result = await updateResponse.json();
+    return res.status(200).json({ success: true, result });
   } catch (e) {
     console.error(e);
-    res.status(500).json({ error: 'Ошибка при записи на GitHub' });
+    return res.status(500).json({ error: "Error writing to GitHub" });
   }
 }
